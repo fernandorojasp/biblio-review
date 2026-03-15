@@ -1,0 +1,17 @@
+# biblio-review
+.env
+data/raw/
+data/processed/*.bib
+data/checkpoints/
+data/logs/
+data/outputs/
+__pycache__/
+*.egg-info/
+.venv/
+*.pyc
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

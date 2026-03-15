@@ -1,0 +1,94 @@
+project_name: my_bibliometric_review
+project_dir: .
+log_dir: data/logs
+checkpoint_dir: data/checkpoints
+verbose: false
+search:
+  databases:
+  - wos
+  - scopus
+  period_start: 2020
+  period_end: 2025
+  language: english
+  document_types:
+  - article
+  - review
+  - conference paper
+  objectives_file: docs/objectives.md
+metadata:
+  input_dir: data/raw
+  output_dir: data/processed
+  dedup_thresholds:
+  - 1.0
+  - 0.97
+  - 0.95
+  dedup_fields:
+  - doi
+  - title
+  - year
+  - authors
+  manual_review_threshold: 0.9
+  output_format: bib
+screening:
+  model: claude-sonnet-4-20250514
+  batch_size: 30
+  inclusion_criteria:
+  - id: IC1
+    description: Studies integrating >=2 data modalities
+  - id: IC2
+    description: Application to medical diagnosis
+  - id: IC3
+    description: Published 2020-2025
+  - id: IC4
+    description: English language
+  - id: IC5
+    description: Articles, reviews, or conference proceedings
+  - id: IC6
+    description: Indexed in WoS or Scopus
+  exclusion_criteria:
+  - id: EC1
+    description: Unimodal AI systems
+  - id: EC2
+    description: Non-diagnostic tasks (prognosis, treatment, etc.)
+  - id: EC3
+    description: Grey literature, preprints, theses
+  - id: EC4
+    description: Non-English language
+  - id: EC5
+    description: No abstract available
+  - id: EC6
+    description: Non-medical or tangential medical data
+  - id: EC7
+    description: Pure engineering without explicit medical application
+  edge_cases:
+  - case: GenAI for synthetic medical data augmentation
+    decision: include
+  - case: Radiology image + text report studies
+    decision: include
+  - case: Generic multimodal architecture without medical application
+    decision: exclude
+  validation_sample_pct: 0.05
+  kappa_threshold: 0.7
+analysis:
+  r_executable: Rscript
+  bibliometrix_version: 5.2.1
+  analyses:
+  - performance
+  - co_citation
+  - co_authorship
+  - keyword_cooccurrence
+  - thematic_map
+  - thematic_evolution
+  split_period: true
+  split_year: 2023
+  min_citations_cocitation: 5
+  min_coauthorships: 2
+  min_keyword_frequency: 5
+  viz_dpi: 300
+  viz_format: png
+paper:
+  target_journal: ''
+  author_guidelines_url: ''
+  citation_style: apa7
+  language: english
+  max_words: 8000

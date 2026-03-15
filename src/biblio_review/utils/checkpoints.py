@@ -83,13 +83,16 @@ class CheckpointManager:
 
         # Add file checksums for any paths in data
         if data:
-            for key, value in data.items():
-                if isinstance(value, (str, Path)):
-                    p = Path(value)
-                    if p.exists() and p.is_file():
-                        checkpoint["data"][f"{key}_checksum"] = (
-                            hashlib.md5(p.read_bytes()).hexdigest()[:12]
-                        )
+            for key, value in list(data.items()):
+                if isinstance(value, (str, Path)) and len(str(value)) < 260:
+                    try:
+                        p = Path(value)
+                        if p.exists() and p.is_file():
+                            checkpoint["data"][f"{key}_checksum"] = (
+                                hashlib.md5(p.read_bytes()).hexdigest()[:12]
+                            )
+                    except OSError:
+                        pass
 
         # Save agent-specific checkpoint
         cp_file = self.dir / f"{agent_name}.json"
