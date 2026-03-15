@@ -1,0 +1,46 @@
+{
+  "total_raw": 25933,
+  "total_unique": 17443,
+  "duplicates_removed": 8490,
+  "duplicate_rate": 32.7,
+  "source_counts": {
+    "scopus_001.csv": 16408,
+    "wos_001.txt": 500,
+    "wos_002.txt": 500,
+    "wos_003.txt": 500,
+    "wos_004.txt": 500,
+    "wos_005.txt": 500,
+    "wos_006.txt": 500,
+    "wos_007.txt": 500,
+    "wos_008.txt": 500,
+    "wos_009.txt": 500,
+    "wos_010.txt": 500,
+    "wos_011.txt": 500,
+    "wos_012.txt": 500,
+    "wos_013.txt": 500,
+    "wos_014.txt": 500,
+    "wos_015.txt": 500,
+    "wos_016.txt": 500,
+    "wos_017.txt": 500,
+    "wos_018.txt": 500,
+    "wos_019.txt": 500,
+    "wos_020.txt": 25
+  },
+  "dedup_levels": [
+    {
+      "method": "DOI exact match",
+      "threshold": 1.0,
+      "duplicates": 8246
+    },
+    {
+      "method": "Title+Year 97% similarity",
+      "threshold": 0.97,
+      "duplicates": 227
+    },
+    {
+      "method": "Title 95% similarity",
+      "threshold": 0.95,
+      "duplicates": 17
+    }
+  ]
+}

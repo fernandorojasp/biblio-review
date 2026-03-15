@@ -222,10 +222,102 @@ class MetadataProcessor(BaseAgent):
         return records
 
     def _parse_wos_txt(self, path: Path) -> list[dict]:
-        """Parse Web of Science plain text export format."""
-        # TODO: Implement WoS plain text parser
-        self.log.warning(f"WoS TXT parser not yet implemented: {path.name}")
-        return []
+        """Parse Web of Science plain text export format.
+
+        WoS plain text uses two-letter field tags:
+        PT=type, AU=authors, AF=full authors, TI=title, SO=source,
+        AB=abstract, DE=author keywords, ID=Keywords Plus,
+        DT=doc type, PY=year, DI=DOI, CR=cited references, ER=end of record.
+        Continuation lines start with spaces.
+        """
+        lines = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
+
+        records = []
+        current: dict[str, list[str]] = {}
+        current_tag = ""
+
+        for line in lines:
+            # Skip file header lines
+            if line.startswith("FN ") or line.startswith("VR "):
+                continue
+
+            # End of record
+            if line.strip() == "ER":
+                if current:
+                    records.append(self._wos_entry_to_record(current, path.name))
+                    current = {}
+                    current_tag = ""
+                continue
+
+            # End of file
+            if line.strip() == "EF":
+                break
+
+            # New field tag (two uppercase letters followed by a space)
+            if len(line) >= 3 and line[0:2].isalpha() and line[0:2].isupper() and line[2] == " ":
+                current_tag = line[0:2]
+                value = line[3:].strip()
+                if current_tag not in current:
+                    current[current_tag] = []
+                current[current_tag].append(value)
+            # Continuation line (starts with spaces)
+            elif line.startswith("   ") and current_tag:
+                current[current_tag].append(line.strip())
+
+        # Catch last record if no trailing ER
+        if current:
+            records.append(self._wos_entry_to_record(current, path.name))
+
+        return records
+
+    def _wos_entry_to_record(self, entry: dict[str, list[str]], source_file: str) -> dict:
+        """Convert a parsed WoS entry dict to a standard record."""
+        # Authors: AF (full name) preferred over AU (short)
+        authors = entry.get("AF", entry.get("AU", []))
+
+        # Keywords: DE (author keywords) + ID (Keywords Plus)
+        keywords_de = []
+        keywords_id = []
+        for kw_line in entry.get("DE", []):
+            keywords_de.extend([k.strip() for k in kw_line.split(";") if k.strip()])
+        for kw_line in entry.get("ID", []):
+            keywords_id.extend([k.strip() for k in kw_line.split(";") if k.strip()])
+
+        # Abstract: join continuation lines
+        abstract = " ".join(entry.get("AB", []))
+
+        # Title: join continuation lines
+        title = " ".join(entry.get("TI", []))
+
+        # Year
+        year = entry.get("PY", [""])[0].strip()
+
+        # DOI
+        doi = entry.get("DI", [""])[0].strip()
+
+        # Journal
+        journal = " ".join(entry.get("SO", []))
+
+        # Document type
+        doc_type = entry.get("DT", [""])[0].strip()
+
+        # Cited references (keep raw for Bibliometrix compatibility)
+        cited_refs = entry.get("CR", [])
+
+        return {
+            "title": title,
+            "authors": authors,
+            "year": year,
+            "abstract": abstract,
+            "doi": doi,
+            "journal": journal,
+            "keywords": keywords_de,
+            "keywords_plus": keywords_id,
+            "type": doc_type,
+            "source_file": source_file,
+            "cited_references": cited_refs,
+            "_wos_raw_tags": {k: v for k, v in entry.items()},
+        }
 
     def _normalize_records(self, records: list[dict]) -> list[dict]:
         """Normalize fields across all records."""
