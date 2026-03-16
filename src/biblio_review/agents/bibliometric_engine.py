@@ -147,8 +147,8 @@ class BibliometricEngine(BaseAgent):
 
     def _check_bibliometrix(self) -> bool:
         """Check if bibliometrix R package is installed."""
-        check_script = 'cat(packageVersion("bibliometrix"))'
-        try:
+        check_script = 'cat(as.character(packageVersion("bibliometrix")))'
+	try:
             result = subprocess.run(
                 [self.config.analysis.r_executable, "-e", check_script],
                 capture_output=True, text=True, timeout=30,
