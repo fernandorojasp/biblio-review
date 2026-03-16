@@ -191,32 +191,47 @@ class MetadataProcessor(BaseAgent):
 
         df = pd.read_csv(path, encoding="utf-8", on_bad_lines="skip")
 
-        # Map common Scopus CSV column names
+        # Map common Scopus CSV column names (try multiple variants)
         col_map = {
             "Title": "title",
+            "Authors": "authors",
             "Author": "authors",
+            "Author full names": "authors_full",
             "Year": "year",
             "Abstract": "abstract",
             "DOI": "doi",
             "Source title": "journal",
+            "Source Title": "journal",
             "Author Keywords": "keywords",
             "Document Type": "type",
+            "Cited by": "cited_by",
         }
+
+        # Normalize column names: strip whitespace and quotes
+        df.columns = [c.strip().strip('"') for c in df.columns]
+
+        # Filter col_map to only columns that exist in the CSV
+        active_map = {c: f for c, f in col_map.items() if c in df.columns}
 
         records = []
         for _, row in df.iterrows():
             record = {}
-            for csv_col, field_name in col_map.items():
+            for csv_col, field_name in active_map.items():
                 val = row.get(csv_col, "")
                 if pd.isna(val):
                     val = ""
-                if field_name == "authors":
+                if field_name in ("authors", "authors_full"):
                     val = [a.strip() for a in str(val).split(";") if a.strip()]
                 elif field_name == "keywords":
                     val = [k.strip() for k in str(val).split(";") if k.strip()]
                 else:
                     val = str(val).strip()
                 record[field_name] = val
+
+            # Prefer "Authors" over "Author", and use full names as fallback
+            if not record.get("authors") and record.get("authors_full"):
+                record["authors"] = record["authors_full"]
+
             record["source_file"] = path.name
             records.append(record)
         return records
