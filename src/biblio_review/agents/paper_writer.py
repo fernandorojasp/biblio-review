@@ -180,10 +180,13 @@ Every claim must be supported by the data provided in the context."""
         # Build section-specific prompt with relevant data
         section_prompt = self._build_section_prompt(section_id, section_title, context)
 
+        # Results and discussion need more space
+        section_max_tokens = 8000 if section_id in ("results", "discussion") else 4000
+
         with self.log.timed(f"generate_{section_id}"):
             response = client.messages.create(
                 model=self.config.screening.model,
-                max_tokens=4000,
+                max_tokens=section_max_tokens,
                 system=system_prompt,
                 messages=[{"role": "user", "content": section_prompt}],
             )
@@ -276,68 +279,137 @@ Write subsections: Study design, Search strategy, Inclusion/exclusion criteria, 
 Follow PRISMA-ScR guidelines. Be precise with numbers."""
 
         elif section_id == "results":
-            # Gather all key metrics
+            # Gather ALL key metrics — performance, thematic, and comparison data
             relevant_keys = [
                 "annual_production", "annual_production_pre", "annual_production_post",
                 "top_authors", "top_sources", "top_countries", "most_cited",
                 "top_authors_pre", "top_authors_post",
+                "top_sources_pre", "top_sources_post",
                 "top_countries_pre", "top_countries_post",
+                "most_cited_pre", "most_cited_post",
+                "bradford", "bradford_pre", "bradford_post",
+                "lotka", "lotka_pre", "lotka_post",
+                "document_types", "document_types_pre", "document_types_post",
+                "thematic_clusters", "thematic_clusters_pre", "thematic_clusters_post",
+                "thematic_map_data", "thematic_map_data_pre", "thematic_map_data_post",
             ]
             relevant = self._format_metrics(context, relevant_keys)
+
+            # For matrices, provide summary stats instead of raw data
+            matrix_summaries = self._summarize_matrices(context)
 
             return f"""Write the RESULTS section for this bibliometric review paper.
 
 METRICS DATA:
 {relevant}
 
+NETWORK ANALYSIS SUMMARIES:
+{matrix_summaries}
+
 Available figures: {', '.join(context['figures'])}
 
 Write subsections:
-3.1 Descriptive analysis and annual production (PI1) — cite exact numbers from annual_production
-3.2 Most productive authors, sources, countries (PI2) — cite top 5 from each ranking
-3.3 Intellectual structure: co-citation analysis (PI3) — describe main clusters if data available
-3.4 Social structure: co-authorship networks (PI2)
-3.5 Conceptual structure: keyword co-occurrence and thematic maps (PI4)
-3.6 Pre/post GenAI comparison (PI1, PI4) — compare pre and post period data
+3.1 Descriptive analysis and annual production (PI1) — cite exact numbers from annual_production, compare pre vs post growth
+3.2 Most productive authors, sources, countries (PI2) — cite top 5 from each ranking, note changes between pre and post periods
+3.3 Intellectual structure: co-citation analysis (PI3) — use the co-citation network summary to describe main clusters
+3.4 Social structure: co-authorship networks (PI2) — use the co-authorship network summary to describe collaboration patterns
+3.5 Conceptual structure: keyword co-occurrence and thematic maps (PI4) — use thematic_clusters and thematic_map_data to describe themes in each quadrant (motor, basic, niche, emerging/declining)
+3.6 Pre/post GenAI comparison (PI1, PI4) — compare pre and post period data across all dimensions
 
 Reference figures as (Figure N) and tables as (Table N).
-Be precise: cite exact values from the data. If a metric is not available, write [DATA NEEDED]."""
+Be precise: cite exact values from the data provided. Use ALL the data — every metric file contains real data that should be referenced."""
 
         elif section_id == "discussion":
             relevant = self._format_metrics(context, [
                 "annual_production", "annual_production_pre", "annual_production_post",
-                "top_countries", "most_cited",
+                "top_countries", "top_countries_pre", "top_countries_post",
+                "most_cited", "most_cited_pre", "most_cited_post",
+                "thematic_clusters", "thematic_clusters_pre", "thematic_clusters_post",
+                "thematic_map_data", "thematic_map_data_pre", "thematic_map_data_post",
             ])
+            matrix_summaries = self._summarize_matrices(context)
+            screening = json.dumps(context.get("screening", {}), indent=2)
+
             return f"""Write the DISCUSSION section for this bibliometric review paper.
 
 KEY DATA:
 {relevant}
 
-Write 5-6 paragraphs covering:
-1. Summary of key findings — the GenAI inflection point
-2. Exponential growth pattern and what drives it
-3. Geographic and institutional implications (China, USA, etc.)
-4. Thematic evolution: what changed post-2023
-5. Research gaps identified (PI5) — underexplored areas, modalities, clinical specialties
-6. Limitations of this study (database bias, language restriction, screening method, temporal window)
+NETWORK SUMMARIES:
+{matrix_summaries}
 
-Be analytical, not just descriptive. Interpret the patterns."""
+SCREENING DATA:
+{screening}
+
+Write 5-6 paragraphs covering:
+1. Summary of key findings — the GenAI inflection point (cite exact production numbers pre vs post)
+2. Exponential growth pattern and what drives it (cite CAGR, key years)
+3. Geographic and institutional implications — cite exact country rankings and shifts between periods
+4. Thematic evolution: what changed post-2023 — use thematic_clusters data to identify emerging vs declining themes
+5. Research gaps identified (PI5) — based on thematic map quadrants (niche and emerging/declining themes), underexplored modalities, clinical specialties with low representation
+6. Limitations of this study (two databases only, English restriction, AI-assisted screening with kappa validation, temporal window may miss early preprints)
+
+Be analytical, not just descriptive. Interpret the patterns using the actual data."""
 
         elif section_id == "conclusions":
+            relevant = self._format_metrics(context, [
+                "annual_production", "top_authors", "top_countries", "most_cited",
+                "thematic_map_data",
+            ])
+            screening = json.dumps(context.get("screening", {}), indent=2)
+
             return f"""Write the CONCLUSIONS section for this bibliometric review paper.
 
 RESEARCH OBJECTIVES:
 {objectives}
 
+KEY DATA SUMMARY:
+{relevant}
+
+SCREENING:
+{screening}
+
 Write 3-4 paragraphs covering:
-1. Summary: answer each research question (PI1-PI5) in one sentence
+1. Summary: answer EACH research question (PI1-PI5) in one sentence, citing specific data:
+   - PI1: cite exact production numbers and growth rates from annual_production
+   - PI2: cite top countries, authors, and journals from the rankings
+   - PI3: cite the most cited papers and how they shifted between periods
+   - PI4: cite specific themes that emerged vs declined from thematic_map_data
+   - PI5: identify specific gaps based on the data
 2. Theoretical contribution: first bibliometric map incorporating GenAI disruption analysis
 3. Practical implications: for researchers, funders, and policy makers
-4. Future research agenda: specific actionable lines of work
+4. Future research agenda: specific actionable lines of work derived from the gaps identified
 
-Keep it concise (400-500 words). End with a forward-looking statement."""
+Keep it concise (400-500 words). End with a forward-looking statement. Use real numbers from the data."""
 
         return f"Write the {section_title} section. [No specific context available]"
+
+    def _summarize_matrices(self, context: dict) -> str:
+        """Summarize network matrices for LLM context (too large to pass raw)."""
+        import pandas as pd
+
+        summaries = []
+        matrix_keys = {
+            "cocitation_matrix": "Co-citation network",
+            "cocitation_matrix_pre": "Co-citation network (pre-GenAI)",
+            "cocitation_matrix_post": "Co-citation network (post-GenAI)",
+            "coauthorship_matrix": "Co-authorship network",
+            "coauthorship_matrix_pre": "Co-authorship network (pre-GenAI)",
+            "coauthorship_matrix_post": "Co-authorship network (post-GenAI)",
+            "keyword_cooccurrence": "Keyword co-occurrence network",
+            "keyword_cooccurrence_pre": "Keyword co-occurrence (pre-GenAI)",
+            "keyword_cooccurrence_post": "Keyword co-occurrence (post-GenAI)",
+        }
+
+        for key, label in matrix_keys.items():
+            if key in context["metrics"]:
+                m = context["metrics"][key]
+                n = m["rows"]
+                # Extract top nodes from column/row names
+                cols = m["columns"][:20] if m["columns"] else []
+                summaries.append(f"### {label}\n- Nodes: {n}\n- Top entities: {', '.join(str(c) for c in cols[:10])}")
+
+        return "\n\n".join(summaries) if summaries else "[No network data available]"
 
     def _format_metrics(self, context: dict, keys: list[str]) -> str:
         """Format selected metrics as text for the LLM prompt."""
