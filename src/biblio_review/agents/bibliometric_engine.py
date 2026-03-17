@@ -389,9 +389,6 @@ cat("Performance analysis complete\\n")
 # ── Co-citation analysis ──────────────────────────────
 tryCatch({{
     NetMatrix <- biblioNetwork(M, analysis = "co-citation", network = "references", sep = ";")
-    net <- networkPlot(NetMatrix, n = 50, type = "auto", Title = "Co-Citation Network{suffix}",
-                       size = TRUE, remove.multiple = TRUE, labelsize = 0.7, edgesize = 3,
-                       plot = FALSE)
 
     # Export adjacency matrix (top 200)
     n <- min(200, nrow(NetMatrix))
@@ -399,7 +396,8 @@ tryCatch({{
 
     # Save network plot
     png("{viz_dir}/cocitation_network{suffix}.png", width = 3000, height = 3000, res = {self.config.analysis.viz_dpi})
-    plot(net$graph)
+    networkPlot(NetMatrix, n = 50, type = "auto", Title = "Co-Citation Network{suffix}",
+                size = TRUE, remove.multiple = TRUE, labelsize = 0.7, edgesize = 3)
     dev.off()
 }}, error = function(e) {{ cat(paste("Co-citation skipped:", e$message, "\\n")); try(dev.off(), silent=TRUE) }})
 
@@ -411,23 +409,27 @@ cat("Co-citation analysis complete\\n")
 # ── Co-authorship analysis ────────────────────────────
 tryCatch({{
     NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "authors", sep = ";")
-    net <- networkPlot(NetMatrix, n = 50, type = "auto", Title = "Author Collaboration{suffix}",
-                       size = TRUE, remove.multiple = TRUE, labelsize = 0.7, plot = FALSE)
 
     n <- min(100, nrow(NetMatrix))
     write.csv(as.matrix(NetMatrix[1:n, 1:n]), "{metrics_dir}/coauthorship_matrix{suffix}.csv")
 
     png("{viz_dir}/coauthorship_network{suffix}.png", width = 3000, height = 3000, res = {self.config.analysis.viz_dpi})
-    plot(net$graph)
+    networkPlot(NetMatrix, n = 50, type = "auto", Title = "Author Collaboration{suffix}",
+                size = TRUE, remove.multiple = TRUE, labelsize = 0.7)
     dev.off()
 }}, error = function(e) {{ cat(paste("Author collaboration skipped:", e$message, "\\n")); try(dev.off(), silent=TRUE) }})
 
-# Country collaboration
+# Country collaboration (requires AU_CO field)
 tryCatch({{
+    M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")
     NetCountry <- biblioNetwork(M, analysis = "collaboration", network = "countries", sep = ";")
+
+    n_co <- min(50, nrow(NetCountry))
+    write.csv(as.matrix(NetCountry[1:n_co, 1:n_co]), "{metrics_dir}/country_collaboration{suffix}.csv")
+
     png("{viz_dir}/country_collaboration{suffix}.png", width = 3000, height = 2000, res = {self.config.analysis.viz_dpi})
-    net_co <- networkPlot(NetCountry, n = 30, type = "auto", Title = "Country Collaboration{suffix}",
-                          size = TRUE, remove.multiple = TRUE, labelsize = 0.8)
+    networkPlot(NetCountry, n = 30, type = "auto", Title = "Country Collaboration{suffix}",
+                size = TRUE, remove.multiple = TRUE, labelsize = 0.8)
     dev.off()
 }}, error = function(e) {{ cat(paste("Country collaboration skipped:", e$message, "\\n")); try(dev.off(), silent=TRUE) }})
 
