@@ -329,23 +329,33 @@ cat(paste("Corpus loaded:", nrow(M), "records\\n"))
 results <- biblioAnalysis(M, sep = ";")
 S <- summary(results, k = 20, pause = FALSE)
 
-# Annual production
-write.csv(results$AnnualProduction, "{metrics_dir}/annual_production{suffix}.csv", row.names = FALSE)
+# Annual production (computed from PY field)
+annual_tab <- table(M$PY)
+annual_df <- data.frame(Year = as.integer(names(annual_tab)), Articles = as.integer(annual_tab))
+annual_df <- annual_df[order(annual_df$Year), ]
+write.csv(annual_df, "{metrics_dir}/annual_production{suffix}.csv", row.names = FALSE)
 
 # Most productive authors
 au <- data.frame(Author = names(results$Authors), Articles = as.integer(results$Authors))
-write.csv(au, "{metrics_dir}/top_authors{suffix}.csv", row.names = FALSE)
+au <- au[order(-au$Articles), ]
+write.csv(head(au, 50), "{metrics_dir}/top_authors{suffix}.csv", row.names = FALSE)
 
 # Most productive sources
 so <- data.frame(Source = names(results$Sources), Articles = as.integer(results$Sources))
-write.csv(so, "{metrics_dir}/top_sources{suffix}.csv", row.names = FALSE)
+so <- so[order(-so$Articles), ]
+write.csv(head(so, 50), "{metrics_dir}/top_sources{suffix}.csv", row.names = FALSE)
 
 # Most productive countries
 co <- data.frame(Country = names(results$Countries), Articles = as.integer(results$Countries))
-write.csv(co, "{metrics_dir}/top_countries{suffix}.csv", row.names = FALSE)
+co <- co[order(-co$Articles), ]
+write.csv(head(co, 50), "{metrics_dir}/top_countries{suffix}.csv", row.names = FALSE)
 
 # Most cited documents
-write.csv(results$MostCitedPapers, "{metrics_dir}/most_cited{suffix}.csv", row.names = FALSE)
+write.csv(head(results$MostCitedPapers, 50), "{metrics_dir}/most_cited{suffix}.csv", row.names = FALSE)
+
+# Document types
+dt <- data.frame(Type = names(results$Documents), Count = as.integer(results$Documents))
+write.csv(dt, "{metrics_dir}/document_types{suffix}.csv", row.names = FALSE)
 
 # Bradford's law
 tryCatch({{
@@ -362,10 +372,12 @@ tryCatch({{
     ), "{metrics_dir}/lotka{suffix}.csv", row.names = FALSE)
 }}, error = function(e) cat(paste("Lotka skipped:", e$message, "\\n")))
 
-# Save plots
+# Save annual production plot
 tryCatch({{
     png("{viz_dir}/annual_production{suffix}.png", width = 2400, height = 1600, res = {self.config.analysis.viz_dpi})
-    plot(x = results, k = 20)
+    barplot(annual_df$Articles, names.arg = annual_df$Year,
+            main = "Annual scientific production", xlab = "Year", ylab = "Articles",
+            col = "#4472C4", border = NA)
     dev.off()
 }}, error = function(e) {{ cat(paste("Plot skipped:", e$message, "\\n")); try(dev.off(), silent=TRUE) }})
 
