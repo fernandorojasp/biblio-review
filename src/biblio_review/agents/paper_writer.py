@@ -136,13 +136,27 @@ class PaperWriter(BaseAgent):
             context["figures"].append(png_file.stem)
 
         # Load reports
-        for report_name in ["audit_report.json", "exclusion_report.json", "prisma_numbers.json", "dedup_report.json"]:
+        for report_name in ["audit_report.json", "exclusion_report.json", "prisma_numbers.json", "dedup_report.json", "comparison_report.json"]:
             report_path = reports_dir / report_name
             if not report_path.exists():
                 report_path = Path("data/processed") / report_name
             if report_path.exists():
                 try:
                     context["reports"][report_name] = json.loads(report_path.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+
+        # Load delta CSVs from comparator
+        delta_dir = metrics_dir.parent / "metrics" / "deltas"
+        if delta_dir.exists():
+            for csv_file in sorted(delta_dir.glob("*.csv")):
+                try:
+                    df = pd.read_csv(csv_file)
+                    context["metrics"][f"delta_{csv_file.stem}"] = {
+                        "columns": list(df.columns),
+                        "rows": len(df),
+                        "data": df.head(30).to_csv(index=False),
+                    }
                 except Exception:
                     pass
 
@@ -292,11 +306,16 @@ Follow PRISMA-ScR guidelines. Be precise with numbers."""
                 "document_types", "document_types_pre", "document_types_post",
                 "thematic_clusters", "thematic_clusters_pre", "thematic_clusters_post",
                 "thematic_map_data", "thematic_map_data_pre", "thematic_map_data_post",
+                "delta_delta_authors", "delta_delta_countries", "delta_delta_sources",
+                "delta_delta_keywords",
             ]
             relevant = self._format_metrics(context, relevant_keys)
 
-            # For matrices, provide summary stats instead of raw data
+            # For matrices, provide summary stats
             matrix_summaries = self._summarize_matrices(context)
+
+            # Comparison report summary
+            comparison_summary = self._format_comparison(context)
 
             return f"""Write the RESULTS section for this bibliometric review paper.
 
@@ -316,6 +335,9 @@ Write subsections:
 3.5 Conceptual structure: keyword co-occurrence and thematic maps (PI4) — use thematic_clusters and thematic_map_data to describe themes in each quadrant (motor, basic, niche, emerging/declining)
 3.6 Pre/post GenAI comparison (PI1, PI4) — compare pre and post period data across all dimensions
 
+COMPARISON DATA (pre vs post GenAI):
+{comparison_summary}
+
 Reference figures as (Figure N) and tables as (Table N).
 Be precise: cite exact values from the data provided. Use ALL the data — every metric file contains real data that should be referenced."""
 
@@ -326,9 +348,11 @@ Be precise: cite exact values from the data provided. Use ALL the data — every
                 "most_cited", "most_cited_pre", "most_cited_post",
                 "thematic_clusters", "thematic_clusters_pre", "thematic_clusters_post",
                 "thematic_map_data", "thematic_map_data_pre", "thematic_map_data_post",
+                "delta_delta_keywords", "delta_delta_countries", "delta_delta_authors",
             ])
             matrix_summaries = self._summarize_matrices(context)
             screening = json.dumps(context.get("screening", {}), indent=2)
+            comparison_summary = self._format_comparison(context)
 
             return f"""Write the DISCUSSION section for this bibliometric review paper.
 
@@ -337,6 +361,9 @@ KEY DATA:
 
 NETWORK SUMMARIES:
 {matrix_summaries}
+
+COMPARISON DATA (pre vs post GenAI):
+{comparison_summary}
 
 SCREENING DATA:
 {screening}
@@ -354,9 +381,10 @@ Be analytical, not just descriptive. Interpret the patterns using the actual dat
         elif section_id == "conclusions":
             relevant = self._format_metrics(context, [
                 "annual_production", "top_authors", "top_countries", "most_cited",
-                "thematic_map_data",
+                "thematic_map_data", "delta_delta_keywords",
             ])
             screening = json.dumps(context.get("screening", {}), indent=2)
+            comparison_summary = self._format_comparison(context)
 
             return f"""Write the CONCLUSIONS section for this bibliometric review paper.
 
@@ -365,6 +393,9 @@ RESEARCH OBJECTIVES:
 
 KEY DATA SUMMARY:
 {relevant}
+
+COMPARISON (pre vs post GenAI):
+{comparison_summary}
 
 SCREENING:
 {screening}
@@ -383,6 +414,50 @@ Write 3-4 paragraphs covering:
 Keep it concise (400-500 words). End with a forward-looking statement. Use real numbers from the data."""
 
         return f"Write the {section_title} section. [No specific context available]"
+
+    def _format_comparison(self, context: dict) -> str:
+        """Format comparison report data for LLM context."""
+        comp = context.get("reports", {}).get("comparison_report.json", {})
+        if not comp:
+            return "[No comparison data available]"
+
+        parts = []
+        analyses = comp.get("analyses", {})
+
+        # Production
+        prod = analyses.get("production", {})
+        if prod and "error" not in prod:
+            parts.append(f"PRODUCTION: Pre={prod.get('pre_total')} articles ({prod.get('pre_avg_per_year')}/yr), Post={prod.get('post_total')} ({prod.get('post_avg_per_year')}/yr), Growth={prod.get('growth_pct')}%")
+
+        # Rankings
+        for key, label in [("authors", "AUTHORS"), ("countries", "COUNTRIES"), ("sources", "SOURCES")]:
+            data = analyses.get(key, {})
+            if data and "error" not in data:
+                new = data.get("new_entrants", [])
+                departed = data.get("departed", [])
+                parts.append(f"{label}: {data.get('persistent', 0)} persistent, {len(new)} new ({', '.join(str(e) for e in new[:10])}), {len(departed)} departed ({', '.join(str(e) for e in departed[:10])})")
+                if data.get("top_risers"):
+                    risers = [f"{r['entity']}(#{r['pre_rank']}->{r['post_rank']})" for r in data["top_risers"][:5]]
+                    parts.append(f"  Top risers: {', '.join(risers)}")
+
+        # Citations
+        cit = analyses.get("citations", {})
+        if cit and "error" not in cit:
+            parts.append(f"CITATIONS: {cit.get('persistent_classics', 0)} persistent classics, {len(cit.get('new_landmark_papers', []))} new landmark papers in post-period")
+
+        # Themes
+        themes = analyses.get("themes", {})
+        if themes and "error" not in themes:
+            emerging = themes.get("emerging_keywords", [])
+            declining = themes.get("declining_keywords", [])
+            parts.append(f"KEYWORDS: {len(emerging)} emerging ({', '.join(emerging[:15])}), {len(declining)} declining ({', '.join(declining[:15])}), {themes.get('persistent_keywords', 0)} persistent")
+
+        # Bradford
+        brad = analyses.get("bradford", {})
+        if brad and "error" not in brad:
+            parts.append(f"BRADFORD: Core journals Pre={brad.get('pre_core_journals')} -> Post={brad.get('post_core_journals')}")
+
+        return "\n".join(parts) if parts else "[No comparison data available]"
 
     def _summarize_matrices(self, context: dict) -> str:
         """Summarize network matrices for LLM context (too large to pass raw)."""
